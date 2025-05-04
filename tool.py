@@ -1,65 +1,57 @@
-import dbdb
 import sys
+import interface
+
+
+def usage():
+    print("Usage:", file=sys.stderr)
+    print(f"  {sys.argv[0]} <filename> get <key>", file=sys.stderr)
+    print(f"  {sys.argv[0]} <filename> set <key> <value>", file=sys.stderr)
+    print(f"  {sys.argv[0]} <filename> delete <key>", file=sys.stderr)
 
 
 def main(argv):
-    if len(argv) < 4 or len(argv) > 5:
-        print(
-            "Usage: python -m dbdb.tool <database_name> <set|get|find|remove> <key> [<value>]"
-        )
-        sys.exit(1)
-
-    dbname = argv[1]
-    verb = argv[2]
-    key = argv[3]
-
-    # Connect to the database
-    db = dbdb.connect(dbname)
-
     try:
-        if verb == "set":
-            if len(argv) != 5:
-                print("Usage: python -m dbdb.tool <database_name> set <key> <value>")
-                sys.exit(1)
-            value = argv[4]
-            db[key] = value  # Set the value for the key
-            db.commit()  # Commit the transaction
-            print(f"Successfully set {key} to {value} in {dbname}.")
+        if len(argv) < 4:
+            usage()
+            return 1
 
-        elif verb == "get":
-            # Get the value for the key
-            if key in db:
-                print(f"The value for {key} is {db[key]} in {dbname}.")
-            else:
-                print(f"Error: The key '{key}' does not exist in {dbname}.")
-                sys.exit(1)
+        dbname, verb, key = argv[1:4]
+        value = argv[4] if len(argv) > 4 else None
 
-        elif verb == "find":
-            # Find the key (check if it exists)
-            if key in db:
-                print(f"Found {key} in {dbname}.")
-            else:
-                print(f"Error: The key '{key}' does not exist in {dbname}.")
-                sys.exit(1)
+        if verb not in {"get", "set", "delete"}:
+            usage()
+            return 1
 
-        elif verb == "remove":
-            # Remove the key from the database
-            if key in db:
-                del db[key]  # Remove the key
-                db.commit()  # Commit the transaction
-                print(f"Successfully removed {key} from {dbname}.")
-            else:
-                print(f"Error: The key '{key}' does not exist in {dbname}.")
-                sys.exit(1)
+        if verb == "set" and value is None:
+            print("Error: 'set' operation requires a value", file=sys.stderr)
+            usage()
+            return 1
 
-        else:
-            print(f"Unsupported verb: {verb}")
-            sys.exit(1)
+        with interface.connect(dbname) as db:
+            if verb == "get":
+                try:
+                    print(db[key])
+                except KeyError:
+                    print(f"Error: Key '{key}' not found", file=sys.stderr)
+                    return 1
+            elif verb == "set":
+                db[key] = value
+                db.commit()
+                print(f"Set {key} = {value}")
+            elif verb == "delete":
+                try:
+                    del db[key]
+                    db.commit()
+                    print(f"Deleted key: {key}")
+                except KeyError:
+                    print(f"Error: Key '{key}' not found", file=sys.stderr)
+                    return 1
 
-    except KeyError:
-        print(f"Error: The key '{key}' does not exist.")
-        sys.exit(1)
-
+        return 0
     except Exception as e:
-        print(f"An error occurred: {e}")
-        sys.exit(1)
+        print(f"Error: {str(e)}", file=sys.stderr)
+        return 1
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv))
